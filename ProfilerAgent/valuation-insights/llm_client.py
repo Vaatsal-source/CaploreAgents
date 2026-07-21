@@ -25,7 +25,7 @@ HALLUCINATION_RULES = """
 - If the dataset contains conflicting values, surface the conflict instead of resolving it silently.
 """
 
-PROMPT_TEMPLATE = """You are a financial analyst writing the "Qualitative Synthesis" section
+PROMPT_TEMPLATE = """You are a financial analyst writing a "Fundamental Analysis Report"
 of a due-diligence report for {company_name} ({ticker}).
 
 Below is a JSON object of PRE-COMPUTED, VERIFIED metrics. Every number in
@@ -40,17 +40,36 @@ do not round differently, and do not introduce any number not present here.
 
 Write your output in exactly this markdown structure, nothing else:
 
-### Core Strengths & Positive Drivers (Pros)
-* **<short bolded label>:** <1-2 sentence observation citing specific numbers from the JSON above>
-(3-5 bullets)
+## Executive Summary
+Provide a brief summary of the company's financial health based on the data. (1 paragraph)
 
-### Risk Factors & Red Flags (Cons)
-* **<short bolded label>:** <1-2 sentence observation citing specific numbers from the JSON above>
-(3-5 bullets)
+## Quantitative Analysis
+### Income Statement Analysis
+Discuss the trends in sales, expenses, operating profit, OPM, net profit, and EPS, citing specific numbers from the JSON. (1-2 paragraphs)
+
+### Balance Sheet Analysis
+Discuss the trends in total assets, borrowings, and shareholders' equity, citing specific numbers from the JSON. (1-2 paragraphs)
+
+### Cash Flow Statement Analysis
+Discuss the trends in operating cash flow, investing cash flow, financing cash flow, and capital expenditures (CapEx), citing specific numbers from the JSON. (1-2 paragraphs)
+
+## Key Financial Ratios & Metrics
+Provide bullet points for the following key ratios, explaining their values:
+* **Price-to-Earnings (P/E) Ratio:** <description citing specific P/E value from the JSON>
+* **Debt-to-Equity (D/E) Ratio:** <description citing specific D/E values over the years from the JSON>
+* **Return on Equity (ROE) & ROCE:** <description citing specific ROE and ROCE values from the JSON>
+* **Free Cash Flow (FCF):** <description citing specific FCF values over the years from the JSON>
+
+## Valuation Models
+### Relative Valuation
+Analyze the stock's valuation using the P/E and P/B multiples from the JSON. (1 paragraph)
+
+### Absolute Valuation (Discounted Cash Flow - DCF)
+Provide a qualitative discussion of the company's absolute valuation model based on historical Cash Flows, CapEx, and growth trends. (1 paragraph)
 """
 
 
-def generate_qualitative_synthesis(computed: dict, model_name: str = "gemini-3.1-flash-lite") -> str:
+def generate_qualitative_synthesis(computed: dict, model_name: str = "gemini-3.5-flash") -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY not set (check your .env file)")

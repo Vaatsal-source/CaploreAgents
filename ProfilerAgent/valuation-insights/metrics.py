@@ -56,16 +56,14 @@ def _last_n(d: dict, n: int = 4) -> dict:
 
 def compute_metrics(extracted: dict) -> dict:
     km = extracted["key_metrics"]
-    pl = extracted["profit_loss"]       # annual P&L (Sales, OPM, Net Profit, etc.)
-    cf = extracted["cash_flows"]        # CFO, FCF, CFO/OP
-    ratios = extracted["ratios"]        # Debtor/Inventory/Payable/WC days
-    bs = extracted["balance_sheet"]     # Borrowings
-    sh_cat = extracted["shareholding_categories"]
-    sh_movers = extracted["shareholding_top_movers"]
+    pl = extracted["profit_loss"]       # annual P&L
+    cf = extracted["cash_flows"]        # CFO, CFI, CFF
+    bs = extracted["balance_sheet"]     # Balance Sheet
+    ratios = extracted["ratios"]        # ROCE etc.
 
     metrics = {}
 
-    # --- valuation & returns (flat from key_metrics) ---
+    # --- 1. Key Metrics & Ratios (from key_metrics) ---
     for label in ("Stock P/E", "Book Value", "ROCE", "ROE", "Dividend Yield",
                   "Market Cap", "Current Price"):
         if label in km and km[label] is not None:
@@ -74,71 +72,69 @@ def compute_metrics(extracted: dict) -> dict:
     if "Current Price" in km and "Book Value" in km and km["Book Value"]:
         metrics["P_B_ratio"] = _fmt_x(km["Current Price"] / km["Book Value"])
 
-    # --- trailing financial trends (annual, from profit_loss) ---
+    # --- 2. Income Statement Trends ---
     sales = _last_n(_mar_years(_find_row(pl, "Sales") or {}))
+    expenses = _last_n(_mar_years(_find_row(pl, "Expenses") or {}))
+    op_profit = _last_n(_mar_years(_find_row(pl, "Operating Profit") or {}))
     opm = _last_n(_mar_years(_find_row(pl, "OPM %") or {}))
     net_profit = _last_n(_mar_years(_find_row(pl, "Net Profit") or {}))
-    other_income = _last_n(_mar_years(_find_row(pl, "Other Income") or {}))
-    pbt = _last_n(_mar_years(_find_row(pl, "Profit before tax") or {}))
-    interest = _last_n(_mar_years(_find_row(pl, "Interest") or {}))
-    material_cost_pct = _last_n(
-        _mar_years(_find_row(pl, "Expenses > Material Cost %") or {})
-    )
-    dividend_payout = _last_n(_mar_years(_find_row(pl, "Dividend Payout %") or {}))
+    eps = _last_n(_mar_years(_find_row(pl, "EPS in Rs") or {}))
 
     metrics["sales_by_year"] = {y: _fmt_cr(v) for y, v in sales.items()}
+    metrics["expenses_by_year"] = {y: _fmt_cr(v) for y, v in expenses.items()}
+    metrics["operating_profit_by_year"] = {y: _fmt_cr(v) for y, v in op_profit.items()}
     metrics["opm_by_year"] = {y: _fmt_pct(v) for y, v in opm.items()}
     metrics["net_profit_by_year"] = {y: _fmt_cr(v) for y, v in net_profit.items()}
-    metrics["interest_by_year"] = {y: _fmt_cr(v) for y, v in interest.items()}
-    metrics["material_cost_pct_by_year"] = {y: _fmt_pct(v) for y, v in material_cost_pct.items()}
-    metrics["dividend_payout_pct_by_year"] = {y: _fmt_pct(v) for y, v in dividend_payout.items()}
+    metrics["eps_by_year"] = {y: f"₹ {v:.2f}" if isinstance(v, (int, float)) else str(v) for y, v in eps.items()}
 
-    years = list(sales.keys())
-    sales_growth = {}
-    for i in range(1, len(years)):
-        prev, cur = sales[years[i - 1]], sales[years[i]]
-        if prev:
-            sales_growth[years[i]] = round((cur - prev) / prev * 100, 2)
-    metrics["sales_growth_pct_by_year"] = {y: _fmt_pct(v) for y, v in sales_growth.items()}
-
-    if pbt and other_income:
-        last_year = list(pbt.keys())[-1]
-        if last_year in other_income and pbt[last_year]:
-            pct = round(other_income[last_year] / pbt[last_year] * 100, 1)
-            key = last_year.replace(" ", "_")
-            metrics[f"other_income_pct_of_pbt_{key}"] = _fmt_pct(pct)
-            metrics[f"other_income_{key}"] = _fmt_cr(other_income[last_year])
-
-    # --- cash flow efficiency (CFO/OP ratio, FCF) ---
-    cfo_op = _last_n(_mar_years(_find_row(cf, "CFO/OP") or {}))
-    cfo = _last_n(_mar_years(_find_row(cf, "Cash from Operating Activity") or {}))
-    fcf = _last_n(_mar_years(_find_row(cf, "Free Cash Flow") or {}))
-    metrics["cfo_op_ratio_by_year"] = {y: _fmt_pct(v) for y, v in cfo_op.items()}
-    metrics["cfo_by_year"] = {y: _fmt_cr(v) for y, v in cfo.items()}
-    metrics["free_cash_flow_by_year"] = {y: _fmt_cr(v) for y, v in fcf.items()}
-
-    # --- efficiency & capital structure (ratios + balance sheet) ---
-    wc_days = _last_n(_mar_years(_find_row(ratios, "Working Capital Days") or {}))
-    debtor_days = _last_n(_mar_years(_find_row(ratios, "Debtor Days") or {}))
-    inventory_days = _last_n(_mar_years(_find_row(ratios, "Inventory Days") or {}))
-    payable_days = _last_n(_mar_years(_find_row(ratios, "Days Payable") or {}))
+    # --- 3. Balance Sheet Snapshot/Trends ---
+    total_assets = _last_n(_mar_years(_find_row(bs, "Total Assets") or {}))
     borrowings = _last_n(_mar_years(_find_row(bs, "Borrowings") or {}))
+    equity_cap = _last_n(_mar_years(_find_row(bs, "Equity Capital") or {}))
+    reserves = _last_n(_mar_years(_find_row(bs, "Reserves") or {}))
 
-    metrics["working_capital_days_by_year"] = {y: str(v) for y, v in wc_days.items()}
-    metrics["debtor_days_by_year"] = {y: str(v) for y, v in debtor_days.items()}
-    metrics["inventory_days_by_year"] = {y: str(v) for y, v in inventory_days.items()}
-    metrics["payable_days_by_year"] = {y: str(v) for y, v in payable_days.items()}
+    metrics["total_assets_by_year"] = {y: _fmt_cr(v) for y, v in total_assets.items()}
     metrics["borrowings_by_year"] = {y: _fmt_cr(v) for y, v in borrowings.items()}
+    
+    # Calculate Shareholders' Equity = Equity Capital + Reserves
+    sh_equity = {}
+    de_ratio = {}
+    for y in total_assets.keys():
+        eq_val = equity_cap.get(y)
+        res_val = reserves.get(y)
+        borrow_val = borrowings.get(y)
+        if eq_val is not None and res_val is not None:
+            equity_sum = eq_val + res_val
+            sh_equity[y] = equity_sum
+            if borrow_val is not None and equity_sum > 0:
+                de_ratio[y] = borrow_val / equity_sum
 
-    # --- shareholding trends ---
-    metrics["shareholding_category_totals_pct"] = {
-        label: {
-            y: (str(int(v)) if "No. of Shareholders" in label else _fmt_pct(v))
-            for y, v in _last_n(values, 7).items()
-        }
-        for label, values in sh_cat.items()
-    }
-    metrics["shareholding_top_movers"] = sh_movers
+    metrics["shareholders_equity_by_year"] = {y: _fmt_cr(v) for y, v in sh_equity.items()}
+    metrics["debt_to_equity_by_year"] = {y: f"{v:.2f}" for y, v in de_ratio.items()}
+
+    # --- 4. Cash Flow Statement Trends ---
+    cfo = _last_n(_mar_years(_find_row(cf, "Cash from Operating Activity") or {}))
+    cfi = _last_n(_mar_years(_find_row(cf, "Cash from Investing Activity") or {}))
+    cff = _last_n(_mar_years(_find_row(cf, "Cash from Financing Activity") or {}))
+    
+    metrics["operating_cash_flow_by_year"] = {y: _fmt_cr(v) for y, v in cfo.items()}
+    metrics["investing_cash_flow_by_year"] = {y: _fmt_cr(v) for y, v in cfi.items()}
+    metrics["financing_cash_flow_by_year"] = {y: _fmt_cr(v) for y, v in cff.items()}
+
+    # CapEx & FCF calculation
+    capex_row = _find_row(cf, "Cash from Investing Activity > Fixed assets purchased") or {}
+    capex = _last_n(_mar_years(capex_row))
+    metrics["capex_by_year"] = {y: _fmt_cr(abs(v)) for y, v in capex.items()}
+
+    fcf = {}
+    for y in cfo.keys():
+        cfo_val = cfo.get(y)
+        capex_val = capex.get(y)  # usually negative in screener
+        if cfo_val is not None:
+            capex_abs = abs(capex_val) if capex_val is not None else 0.0
+            fcf[y] = cfo_val - capex_abs
+
+    metrics["free_cash_flow_by_year"] = {y: _fmt_cr(v) for y, v in fcf.items()}
 
     # flatten out None/empty values so the LLM never sees "null" or "{}"
     def _prune(d):

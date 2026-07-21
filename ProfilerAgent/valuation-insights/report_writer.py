@@ -16,7 +16,7 @@ def write_report(company_name: str, ticker: str, qualitative_md: str,
     out_dir.mkdir(parents=True, exist_ok=True)
 
     report_path = out_dir / "report.md"
-    header = f"# {company_name} ({ticker}) - Qualitative Synthesis\n\n"
+    header = f"# {company_name} ({ticker}) - Fundamental Analysis Report\n\n"
     report_path.write_text(header + qualitative_md, encoding="utf-8")
 
     # audit trail - not shown to the end user, but invaluable for debugging

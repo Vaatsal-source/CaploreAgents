@@ -89,74 +89,16 @@ def extract_row_table(rows: list) -> list:
     return flat
 
 
-def extract_pros_cons_raw(data: dict) -> dict:
-    """Screener's own pre-written pros/cons - kept as separate raw source
-    text. NOT used as the LLM's output; useful only as cross-reference."""
-    return data.get("pros_cons", {"pros": [], "cons": []})
-
-
-def _num(v):
-    try:
-        return float(str(v).replace(",", "").replace("%", "").strip())
-    except (ValueError, TypeError):
-        return None
-
-
-def extract_shareholding_categories(data: dict) -> dict:
-    """
-    data["shareholding"]["table_1"] / ["table_2"] are simple row-tables
-    (Promoters / FIIs / DIIs / Government / Public rows, one column per
-    period) - table_1 is quarterly-granularity, table_2 is annual/yearly.
-    We use table_2 for the year-over-year category totals actually cited
-    in the report.
-    """
-    sh = data.get("shareholding", {})
-    table = sh.get("table_2") or sh.get("table_1") or []
-    flat = extract_row_table(table)
-    return {row["label"]: row["values"] for row in flat}
-
-
-def extract_top_investors(data: dict, top_n: int = 5) -> dict:
-    """
-    data["investors"]["yearly"] holds individual-holder detail (LIC, SBI MF,
-    foreign funds, promoter-linked entities, etc.), keyed by category then
-    entity name then year - this is where the hundreds of 0.00% shell/LLP
-    entities live. We drop anything that's zero across every year it
-    appears, then keep only the top N movers per category by
-    (max - min) over the years each entity actually reports.
-    """
-    investors = data.get("investors", {}).get("yearly", {})
-    top_movers = {}
-    for category, entities in investors.items():
-        movers = []
-        for name, yearly in entities.items():
-            vals = [_num(v) for v in yearly.values() if _num(v) is not None]
-            if not vals or max(vals) == 0:
-                continue
-            movement = max(vals) - min(vals)
-            movers.append((name, yearly, movement))
-        movers.sort(key=lambda x: x[2], reverse=True)
-        if movers:
-            top_movers[category] = [
-                {"name": name, "values": yearly} for name, yearly, _ in movers[:top_n]
-            ]
-    return top_movers
-
-
 def extract_all(json_path: str) -> dict:
     data = json.loads(Path(json_path).read_text(encoding="utf-8"))
     return {
         "ticker": data.get("ticker"),
         "company_name": data.get("overview", {}).get("company_name"),
         "key_metrics": extract_key_metrics(data),
-        "quarterly": extract_row_table(data.get("quarterly", [])),
         "profit_loss": extract_row_table(data.get("profit_loss", [])),
         "balance_sheet": extract_row_table(data.get("balance_sheet", [])),
         "cash_flows": extract_row_table(data.get("cash_flows", [])),
         "ratios": extract_row_table(data.get("ratios", [])),
-        "pros_cons_raw": extract_pros_cons_raw(data),
-        "shareholding_categories": extract_shareholding_categories(data),
-        "shareholding_top_movers": extract_top_investors(data),
     }
 
 
